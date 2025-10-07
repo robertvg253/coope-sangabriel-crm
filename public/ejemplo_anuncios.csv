@@ -1,0 +1,6 @@
+id_meta_ads,name,status,campaign_id
+123456789,Anuncio Principal Q4,ACTIVE,987654321
+123456790,Anuncio Secundario,PAUSED,987654321
+123456791,Anuncio Test,ACTIVE,987654322
+123456792,Anuncio Promocional,ACTIVE,987654323
+123456793,Anuncio Retargeting,ACTIVE,987654324
