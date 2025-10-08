@@ -4,6 +4,7 @@ import { supabaseAdmin } from "~/supabase/supabaseAdmin";
 import { redirect } from "react-router";
 import { useState, useEffect } from "react";
 import UploadAdsModal from "~/components/UploadAdsModal";
+import { getAllContactsFromBackup } from "~/utils/pagination";
 
 // Verificar autenticación y obtener anuncios con efectividad
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -58,19 +59,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       };
     }
 
-    // Obtener contactos para calcular efectividad
-    const { data: contacts, error: contactsError } = await supabaseAdmin
-      .from('contactos')
-      .select('whatsapp_cloud_ad_source_id')
-      .not('whatsapp_cloud_ad_source_id', 'is', null);
+    // Obtener TODOS los contactos para calcular efectividad desde contactos_backup
+    // Usar función helper con paginación para superar el límite de 1000 registros de Supabase
+    const allContacts = await getAllContactsFromBackup();
 
-    if (contactsError) {
-      console.error("Error al obtener contactos:", contactsError);
-    }
-
-    // Calcular efectividad manualmente
+    // Calcular efectividad manualmente con TODOS los contactos
     const adsWithEffectiveness = (fallbackAds || []).map(ad => {
-      const contactCount = (contacts || []).filter(contact => 
+      const contactCount = allContacts.filter(contact => 
         contact.whatsapp_cloud_ad_source_id === ad.id_meta_ads
       ).length;
 

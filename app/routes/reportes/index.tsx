@@ -49,9 +49,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     ]);
 
     // Procesar opciones únicas (convertir correos a nombres)
-    const uniqueAgents = [...new Set(agents?.map(a => convertEmailToName(a.assigned_user, emailMapping)).filter(Boolean) || [])];
-    const uniqueTags = [...new Set(tags?.map(t => t.tags).filter(Boolean) || [])];
-    const reportTagNames = reportTags.data?.map(t => t.tag_name) || [];
+    const uniqueAgents = [...new Set(agents?.map((a: any) => convertEmailToName(a.assigned_user, emailMapping)).filter(Boolean) || [])];
+    const uniqueTags = [...new Set(tags?.map((t: any) => t.tags).filter(Boolean) || [])];
+    const reportTagNames = reportTags.data?.map((t: any) => t.tag_name) || [];
 
     console.log("👥 Agentes únicos (nombres):", uniqueAgents.length);
     console.log("🏷️ Etiquetas únicas:", uniqueTags.length);
@@ -62,7 +62,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const agentPerformance = agents?.filter(record => record.assigned_user) || [];
 
     // Procesar datos de agentes (convertir correos a nombres)
-    const agentStats = (agentPerformance || []).reduce((acc, record) => {
+    const agentStats = (agentPerformance || []).reduce((acc: any, record: any) => {
       const agentEmail = record.assigned_user;
       const agentName = convertEmailToName(agentEmail, emailMapping);
       
@@ -113,8 +113,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const allRecords = tags || [];
 
     // Calcular efectividad por etiqueta
-    const tagEffectiveness = reportTagNames.map(tagName => {
-      const count = (allRecords || []).filter(record => 
+    const tagEffectiveness = reportTagNames.map((tagName: any) => {
+      const count = (allRecords || []).filter((record: any) => 
         record.tags && record.tags.includes(tagName)
       ).length;
       

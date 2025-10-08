@@ -1,72 +1,104 @@
 import { supabaseAdmin } from "~/supabase/supabaseAdmin";
 
 /**
- * Función para obtener todos los registros de una tabla usando paginación
+ * Obtiene todos los registros de una tabla usando paginación para superar el límite de 1000 de Supabase
  * @param tableName - Nombre de la tabla
- * @param selectColumns - Columnas a seleccionar
- * @param batchSize - Tamaño del lote (por defecto 1000)
+ * @param selectFields - Campos a seleccionar (por defecto '*')
+ * @param filters - Filtros adicionales opcionales
  * @returns Array con todos los registros
  */
-export async function getAllRecords(
+export async function getAllRecordsWithPagination(
   tableName: string,
-  selectColumns: string = '*',
-  batchSize: number = 1000
+  selectFields: string = '*',
+  filters?: {
+    column?: string;
+    operator?: string;
+    value?: any;
+  }
 ): Promise<any[]> {
-  const allRecords: any[] = [];
-  let offset = 0;
+  console.log(`📊 Obteniendo todos los registros de ${tableName}...`);
+  
+  let allRecords: any[] = [];
+  let page = 0;
+  const pageSize = 1000;
   let hasMore = true;
-
-  console.log(`🔄 Iniciando carga de todos los registros de ${tableName}`);
-
+  
   while (hasMore) {
-    try {
-      const { data, error } = await supabaseAdmin
-        .from(tableName)
-        .select(selectColumns)
-        .range(offset, offset + batchSize - 1);
-
-      if (error) {
-        console.error(`❌ Error al obtener registros de ${tableName}:`, error);
-        throw error;
+    let query = supabaseAdmin
+      .from(tableName)
+      .select(selectFields)
+      .range(page * pageSize, (page + 1) * pageSize - 1);
+    
+    // Aplicar filtros si se proporcionan
+    if (filters) {
+      if (filters.operator === 'not' && filters.value === null) {
+        query = query.not(filters.column!, 'is', null);
+      } else if (filters.operator && filters.value !== undefined) {
+        query = query.filter(filters.column!, filters.operator, filters.value);
       }
-
-      if (data && data.length > 0) {
-        allRecords.push(...data);
-        console.log(`📊 Lote ${Math.floor(offset / batchSize) + 1}: ${data.length} registros (Total: ${allRecords.length})`);
-        
-        // Si obtenemos menos registros que el batchSize, hemos llegado al final
-        if (data.length < batchSize) {
-          hasMore = false;
-        } else {
-          offset += batchSize;
-        }
-      } else {
+    }
+    
+    const { data: recordsPage, error } = await query;
+    
+    if (error) {
+      console.error(`Error al obtener registros de ${tableName} en página ${page}:`, error);
+      break;
+    }
+    
+    if (recordsPage && recordsPage.length > 0) {
+      allRecords = [...allRecords, ...recordsPage];
+      console.log(`📄 Página ${page + 1}: ${recordsPage.length} registros obtenidos. Total acumulado: ${allRecords.length}`);
+      page++;
+      
+      // Si obtenemos menos de pageSize, es la última página
+      if (recordsPage.length < pageSize) {
         hasMore = false;
       }
-    } catch (error) {
-      console.error(`❌ Error en paginación para ${tableName}:`, error);
-      throw error;
+    } else {
+      hasMore = false;
     }
   }
-
-  console.log(`✅ Carga completada: ${allRecords.length} registros totales de ${tableName}`);
+  
+  console.log(`📈 Total de registros obtenidos de ${tableName}: ${allRecords.length}`);
   return allRecords;
 }
 
 /**
- * Función específica para obtener datos de agentes con paginación
- * @param tableName - Nombre de la tabla
- * @returns Array con todos los registros de agentes
+ * Obtiene todos los contactos de contactos_backup con paginación
+ * @returns Array con todos los contactos
  */
-export async function getAllAgentData(tableName: string): Promise<any[]> {
-  return getAllRecords(tableName, 'assigned_user, tags');
+export async function getAllContactsFromBackup(): Promise<any[]> {
+  return getAllRecordsWithPagination(
+    'contactos_backup',
+    'whatsapp_cloud_ad_source_id',
+    {
+      column: 'whatsapp_cloud_ad_source_id',
+      operator: 'not',
+      value: null
+    }
+  );
 }
 
 /**
- * Función específica para obtener todas las etiquetas con paginación
- * @param tableName - Nombre de la tabla
- * @returns Array con todos los registros de etiquetas
+ * Obtiene todos los datos de agentes (assigned_user) de una tabla específica
+ * @param tableName - Nombre de la tabla (ej: 'contactos', 'contactos_backup')
+ * @returns Array con todos los registros de agentes
+ */
+export async function getAllAgentData(tableName: string): Promise<any[]> {
+  return getAllRecordsWithPagination(
+    tableName,
+    'assigned_user, created_at, source, tags, name, phone_number'
+  );
+}
+
+/**
+ * Obtiene todos los datos de tags de una tabla específica
+ * @param tableName - Nombre de la tabla (ej: 'contactos', 'contactos_backup')
+ * @returns Array con todos los registros de tags
  */
 export async function getAllTagsData(tableName: string): Promise<any[]> {
-  return getAllRecords(tableName, 'tags');
+  return getAllRecordsWithPagination(
+    tableName,
+    'tags, assigned_user, created_at, source, name, phone_number'
+  );
 }
