@@ -4,8 +4,26 @@ import { supabaseAdmin } from "~/supabase/supabaseAdmin";
 import { redirect } from "react-router";
 import { useState } from "react";
 import PieChart from "~/components/PieChart";
-import { getAllAgentData, getAllTagsData } from "~/utils/pagination";
+import { getAllAgentData, getAllTagsData, getAllRecordsWithPagination } from "~/utils/pagination";
 import { getEmailToNameMapping, convertEmailToName } from "~/utils/emailMapping";
+
+// Estilos para la animación de la gráfica circular
+const animationStyles = `
+  @keyframes fillCircle {
+    from {
+      stroke-dasharray: 251.2 251.2;
+      stroke-dashoffset: 251.2;
+    }
+    to {
+      stroke-dasharray: var(--target-dasharray);
+      stroke-dashoffset: var(--target-dashoffset, 0);
+    }
+  }
+  
+  .animate-fill-circle {
+    animation: fillCircle 1.5s ease-out forwards;
+  }
+`;
 
 // Verificar autenticación y obtener reportes con lógica condicional
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -127,6 +145,57 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
     console.log("📊 Reporte 2 - Etiquetas:", tagEffectiveness);
 
+    // NUEVO REPORTE 2: Análisis de Origen de Leads (Lógica Simplificada)
+    console.log("🔄 Iniciando análisis de origen de leads...");
+    
+    // 1. Obtener todos los leads de la tabla fuente seleccionada
+    console.log(`📊 Obteniendo todos los leads de ${dataTable}...`);
+    const allLeads = await getAllRecordsWithPagination(
+      dataTable,
+      'name, phone_number, created_at, "whatsapp cloud ad source url", "whatsapp cloud ad source id"'
+    );
+    
+    console.log(`📊 Total de leads en ${dataTable}: ${allLeads.length}`);
+    
+    // 2. Clasificar cada lead directamente
+    const leadsDetallados: any[] = [];
+    let facebookLeadsCount = 0;
+    let otherLeadsCount = 0;
+    
+    allLeads.forEach(lead => {
+      // Verificar si tiene fuente de Facebook Ads
+      const hasFacebookSource = (
+        (lead["whatsapp cloud ad source url"] !== null && lead["whatsapp cloud ad source url"] !== undefined && lead["whatsapp cloud ad source url"] !== "") ||
+        (lead["whatsapp cloud ad source id"] !== null && lead["whatsapp cloud ad source id"] !== undefined && lead["whatsapp cloud ad source id"] !== "")
+      );
+      
+      const leadWithSource = {
+        name: lead.name,
+        phone_number: lead.phone_number,
+        created_at: lead.created_at,
+        source: hasFacebookSource ? "Facebook Ads" : "Indeterminado"
+      };
+      
+      leadsDetallados.push(leadWithSource);
+      
+      // Incrementar contadores
+      if (hasFacebookSource) {
+        facebookLeadsCount++;
+      } else {
+        otherLeadsCount++;
+      }
+    });
+    
+    // 3. Calcular resumen
+    const summary = {
+      totalLeads: facebookLeadsCount + otherLeadsCount,
+      facebookLeadsCount,
+      otherLeadsCount
+    };
+    
+    console.log("📊 Resumen de origen de leads:", summary);
+    console.log("📊 Leads detallados:", leadsDetallados.length);
+
     // 4. REPORTE 3: Canales Digitales (Metas vs Ventas)
     // Datos simulados basados en la estructura de la imagen
     const digitalChannelsData = [
@@ -152,8 +221,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       // Reporte 1: Desempeño por Agente
       agentPerformanceTable,
       pieChartData,
-      // Reporte 2: Efectividad por Etiqueta
+      // Reporte 2: Efectividad por Etiqueta (original)
       tagEffectiveness,
+      // NUEVO Reporte 2: Análisis de Origen de Leads
+      reporteLeadsPorFuente: {
+        summary,
+        leadsDetallados
+      },
       // Reporte 3: Canales Digitales
       digitalChannelsData
     };
@@ -171,6 +245,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
       agentPerformanceTable: [],
       pieChartData: [],
       tagEffectiveness: [],
+      reporteLeadsPorFuente: {
+        summary: { totalLeads: 0, facebookLeadsCount: 0, otherLeadsCount: 0 },
+        leadsDetallados: []
+      },
       digitalChannelsData: []
     };
   }
@@ -186,6 +264,7 @@ export default function ReportesPage() {
     agentPerformanceTable, 
     pieChartData, 
     tagEffectiveness, 
+    reporteLeadsPorFuente,
     digitalChannelsData 
   } = useLoaderData<typeof loader>();
 
@@ -198,6 +277,8 @@ export default function ReportesPage() {
 
   return (
     <div className="space-y-6">
+      {/* Inyectar estilos de animación */}
+      <style dangerouslySetInnerHTML={{ __html: animationStyles }} />
       {/* Header */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-6">
         <div className="flex items-center justify-between">
@@ -306,6 +387,183 @@ export default function ReportesPage() {
             data={pieChartData} 
             title="Distribución Público vs Privado" 
           />
+        </div>
+      </div>
+
+      {/* NUEVO REPORTE 2: Análisis de Origen de Leads */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Reporte 2: Análisis de Origen de Leads</h2>
+        </div>
+        <div className="p-6">
+          {/* Tabla de Resumen */}
+          <div className="mb-6">
+            <h3 className="text-md font-semibold text-gray-900 mb-4">Resumen de Origen de Leads</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fuente</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Cantidad</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Porcentaje</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  <tr>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      Facebook Ads
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {reporteLeadsPorFuente.summary.facebookLeadsCount}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800">
+                        {reporteLeadsPorFuente.summary.totalLeads > 0 
+                          ? Math.round((reporteLeadsPorFuente.summary.facebookLeadsCount / reporteLeadsPorFuente.summary.totalLeads) * 100)
+                          : 0}%
+                      </span>
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                      Email / SMS / Otros
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                      {reporteLeadsPorFuente.summary.otherLeadsCount}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800">
+                        {reporteLeadsPorFuente.summary.totalLeads > 0 
+                          ? Math.round((reporteLeadsPorFuente.summary.otherLeadsCount / reporteLeadsPorFuente.summary.totalLeads) * 100)
+                          : 0}%
+                      </span>
+                    </td>
+                  </tr>
+                  <tr className="bg-gray-50">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                      Total
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-bold text-gray-900">
+                      {reporteLeadsPorFuente.summary.totalLeads}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className="inline-flex px-2 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-800">
+                        100%
+                      </span>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Gráfica Circular */}
+          <div className="mb-6">
+            <h3 className="text-md font-semibold text-gray-900 mb-4">Distribución de Leads por Fuente</h3>
+            <div className="flex items-center justify-center">
+              {/* Etiqueta Facebook Ads (izquierda) */}
+              <div className="flex flex-col items-center mr-8">
+                <div className="w-4 h-4 bg-blue-500 rounded-full mb-2"></div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-blue-600">
+                    {reporteLeadsPorFuente.summary.facebookLeadsCount}
+                  </div>
+                  <div className="text-sm text-gray-600">leads</div>
+                  <div className="text-xs text-gray-500">
+                    ({reporteLeadsPorFuente.summary.totalLeads > 0 
+                      ? Math.round((reporteLeadsPorFuente.summary.facebookLeadsCount / reporteLeadsPorFuente.summary.totalLeads) * 100)
+                      : 0}%)
+                  </div>
+                </div>
+              </div>
+
+              {/* Gráfica Central */}
+              <div className="relative w-64 h-64">
+                {/* Gráfica de Dona Circular con Animación */}
+                <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                  {/* Fondo del círculo */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke="#e5e7eb"
+                    strokeWidth="8"
+                  />
+                  
+                  {/* Segmento de Facebook Ads con animación */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth="8"
+                    strokeDasharray="251.2 251.2"
+                    strokeDashoffset="251.2"
+                    className="animate-fill-circle"
+                    style={{
+                      animationDelay: '0.5s',
+                      animationDuration: '1.5s',
+                      animationFillMode: 'forwards',
+                      '--target-dasharray': `${reporteLeadsPorFuente.summary.totalLeads > 0 
+                        ? (reporteLeadsPorFuente.summary.facebookLeadsCount / reporteLeadsPorFuente.summary.totalLeads) * 251.2 
+                        : 0} 251.2`
+                    } as React.CSSProperties}
+                  />
+                  
+                  {/* Segmento de Otros con animación */}
+                  <circle
+                    cx="50"
+                    cy="50"
+                    r="40"
+                    fill="none"
+                    stroke="#10b981"
+                    strokeWidth="8"
+                    strokeDasharray="251.2 251.2"
+                    strokeDashoffset="251.2"
+                    className="animate-fill-circle"
+                    style={{
+                      animationDelay: '1s',
+                      animationDuration: '1.5s',
+                      animationFillMode: 'forwards',
+                      '--target-dasharray': `${reporteLeadsPorFuente.summary.totalLeads > 0 
+                        ? (reporteLeadsPorFuente.summary.otherLeadsCount / reporteLeadsPorFuente.summary.totalLeads) * 251.2 
+                        : 0} 251.2`,
+                      '--target-dashoffset': `${reporteLeadsPorFuente.summary.totalLeads > 0 
+                        ? -(reporteLeadsPorFuente.summary.facebookLeadsCount / reporteLeadsPorFuente.summary.totalLeads) * 251.2 
+                        : 0}`
+                    } as React.CSSProperties}
+                  />
+                </svg>
+                
+                {/* Texto central */}
+                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                  <div className="text-2xl font-bold text-gray-900">
+                    {reporteLeadsPorFuente.summary.totalLeads}
+                  </div>
+                  <div className="text-sm text-gray-600">Total Leads</div>
+                </div>
+              </div>
+
+              {/* Etiqueta Otros (derecha) */}
+              <div className="flex flex-col items-center ml-8">
+                <div className="w-4 h-4 bg-green-500 rounded-full mb-2"></div>
+                <div className="text-center">
+                  <div className="text-lg font-bold text-green-600">
+                    {reporteLeadsPorFuente.summary.otherLeadsCount}
+                  </div>
+                  <div className="text-sm text-gray-600">leads</div>
+                  <div className="text-xs text-gray-500">
+                    ({reporteLeadsPorFuente.summary.totalLeads > 0 
+                      ? Math.round((reporteLeadsPorFuente.summary.otherLeadsCount / reporteLeadsPorFuente.summary.totalLeads) * 100)
+                      : 0}%)
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
         </div>
       </div>
 
