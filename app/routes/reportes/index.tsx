@@ -114,9 +114,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
     });
 
     // Calcular totales para el gráfico de dona
-    const totalLeads = agentPerformanceTable.reduce((sum, agent) => sum + agent.leads, 0);
-    const totalPublico = agentPerformanceTable.reduce((sum, agent) => sum + agent.publico, 0);
-    const totalPrivado = agentPerformanceTable.reduce((sum, agent) => sum + agent.privado, 0);
+    const totalLeads = agentPerformanceTable.reduce((sum: number, agent: any) => sum + agent.leads, 0);
+    const totalPublico = agentPerformanceTable.reduce((sum: number, agent: any) => sum + agent.publico, 0);
+    const totalPrivado = agentPerformanceTable.reduce((sum: number, agent: any) => sum + agent.privado, 0);
 
     const pieChartData = [
       { label: 'Público', value: totalPublico, percentage: totalLeads > 0 ? Math.round((totalPublico / totalLeads) * 100) : 0 },
@@ -196,7 +196,122 @@ export async function loader({ request }: LoaderFunctionArgs) {
     console.log("📊 Resumen de origen de leads:", summary);
     console.log("📊 Leads detallados:", leadsDetallados.length);
 
-    // 4. REPORTE 3: Canales Digitales (Metas vs Ventas)
+    // NUEVO REPORTE 3: Análisis de Etiquetas por Frecuencia
+    console.log("🏷️ Iniciando análisis de etiquetas...");
+    
+    // 1. Obtener todos los leads con sus etiquetas
+    const leadsWithTags = await getAllRecordsWithPagination(
+      dataTable,
+      'name, tags'
+    );
+    
+    console.log(`🏷️ Total de leads con etiquetas en ${dataTable}: ${leadsWithTags.length}`);
+    
+    // 2. Extraer todas las etiquetas únicas y contar frecuencias
+    const tagFrequency: Record<string, number> = {};
+    
+    console.log("🔍 Analizando estructura de etiquetas...");
+    console.log("📋 Primeros 5 leads con tags:", leadsWithTags.slice(0, 5).map(lead => ({
+      name: lead.name,
+      tags: lead.tags,
+      tagsType: typeof lead.tags
+    })));
+    
+    leadsWithTags.forEach((lead, index) => {
+      let tagsArray: string[] = [];
+      
+      // Intentar parsear las etiquetas de diferentes formas
+      if (lead.tags) {
+        if (Array.isArray(lead.tags)) {
+          // Ya es un array
+          tagsArray = lead.tags;
+        } else if (typeof lead.tags === 'string') {
+          try {
+            // Intentar parsear como JSON
+            const parsed = JSON.parse(lead.tags);
+            if (Array.isArray(parsed)) {
+              tagsArray = parsed;
+            }
+          } catch (error) {
+            // Si no es JSON válido, tratar como string simple
+            console.log(`⚠️ Lead ${index}: tags no es JSON válido:`, lead.tags);
+          }
+        }
+      }
+      
+      console.log(`📋 Lead ${index} (${lead.name}):`, {
+        originalTags: lead.tags,
+        parsedTags: tagsArray,
+        tagsCount: tagsArray.length
+      });
+      
+      // Procesar cada etiqueta
+      if (tagsArray.length > 0) {
+        tagsArray.forEach((tag: string) => {
+          if (tag && typeof tag === 'string' && tag.trim() !== '') {
+            const cleanTag = tag.trim();
+            tagFrequency[cleanTag] = (tagFrequency[cleanTag] || 0) + 1;
+            console.log(`🏷️ Etiqueta encontrada: "${cleanTag}" (total: ${tagFrequency[cleanTag]})`);
+          }
+        });
+      }
+    });
+    
+    console.log("📊 Frecuencia de etiquetas calculada:", tagFrequency);
+    
+    // 3. Convertir a array ordenado por frecuencia
+    const tagAnalysis = Object.entries(tagFrequency)
+      .map(([tag, count]) => ({
+        tag,
+        count,
+        percentage: leadsWithTags.length > 0 ? Math.round((count / leadsWithTags.length) * 100) : 0
+      }))
+      .sort((a, b) => b.count - a.count); // Ordenar por frecuencia descendente
+    
+    console.log("🏷️ Etiquetas únicas encontradas:", Object.keys(tagFrequency).length);
+    console.log("🏷️ Análisis de etiquetas:", tagAnalysis);
+    
+    // 4. Calcular totales CORRECTOS
+    const totalTagAssignments = Object.values(tagFrequency).reduce((sum, count) => sum + count, 0); // Total de etiquetas asignadas
+    const uniqueTagsCount = Object.keys(tagFrequency).length;
+    
+    // Contar leads con y sin etiquetas
+    let leadsWithTagsCount = 0;
+    let leadsWithoutTagsCount = 0;
+    
+    leadsWithTags.forEach(lead => {
+      let hasTags = false;
+      
+      if (lead.tags) {
+        if (Array.isArray(lead.tags) && lead.tags.length > 0) {
+          hasTags = true;
+        } else if (typeof lead.tags === 'string') {
+          try {
+            const parsed = JSON.parse(lead.tags);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              hasTags = true;
+            }
+          } catch (error) {
+            // No es JSON válido, no tiene etiquetas
+          }
+        }
+      }
+      
+      if (hasTags) {
+        leadsWithTagsCount++;
+      } else {
+        leadsWithoutTagsCount++;
+      }
+    });
+    
+    console.log("📊 Resumen final de etiquetas:");
+    console.log(`  - Total de leads: ${leadsWithTags.length}`);
+    console.log(`  - Etiquetas únicas: ${uniqueTagsCount}`);
+    console.log(`  - Total de asignaciones de etiquetas: ${totalTagAssignments}`);
+    console.log(`  - Leads CON etiquetas: ${leadsWithTagsCount}`);
+    console.log(`  - Leads SIN etiquetas: ${leadsWithoutTagsCount}`);
+
+    // 4. REPORTE 4: Canales Digitales (Metas vs Ventas)
     // Datos simulados basados en la estructura de la imagen
     const digitalChannelsData = [
       { canal: 'Facebook Ads', meta: 150, ventas: 120, envios: 135, cumplimiento: 80 },
@@ -228,7 +343,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
         summary,
         leadsDetallados
       },
-      // Reporte 3: Canales Digitales
+      // NUEVO Reporte 3: Análisis de Etiquetas
+      reporteEtiquetas: {
+        tagAnalysis,
+        totalTagAssignments,
+        uniqueTagsCount,
+        leadsWithTagsCount,
+        leadsWithoutTagsCount,
+        totalLeads: leadsWithTags.length
+      },
+      // Reporte 4: Canales Digitales
       digitalChannelsData
     };
 
@@ -249,6 +373,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
         summary: { totalLeads: 0, facebookLeadsCount: 0, otherLeadsCount: 0 },
         leadsDetallados: []
       },
+      reporteEtiquetas: {
+        tagAnalysis: [],
+        totalTagAssignments: 0,
+        uniqueTagsCount: 0,
+        leadsWithTagsCount: 0,
+        leadsWithoutTagsCount: 0,
+        totalLeads: 0
+      },
       digitalChannelsData: []
     };
   }
@@ -265,6 +397,7 @@ export default function ReportesPage() {
     pieChartData, 
     tagEffectiveness, 
     reporteLeadsPorFuente,
+    reporteEtiquetas,
     digitalChannelsData 
   } = useLoaderData<typeof loader>();
 
@@ -352,7 +485,7 @@ export default function ReportesPage() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {agentPerformanceTable.map((agent, index) => (
+                {agentPerformanceTable.map((agent: any, index: number) => (
                   <tr key={agent.agent} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                       {agent.agent}
@@ -564,6 +697,93 @@ export default function ReportesPage() {
             </div>
           </div>
 
+        </div>
+      </div>
+
+      {/* NUEVO REPORTE 3: Análisis de Etiquetas por Frecuencia */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200">
+        <div className="px-6 py-4 border-b border-gray-200">
+          <h2 className="text-lg font-semibold text-gray-900">Reporte 3: Análisis de Etiquetas por Frecuencia</h2>
+        </div>
+        <div className="p-6">
+          {/* Resumen de Etiquetas */}
+          <div className="mb-6">
+            <h3 className="text-md font-semibold text-gray-900 mb-4">Resumen de Etiquetas</h3>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="bg-blue-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-blue-900">Total de Leads</h4>
+                <p className="text-2xl font-bold text-blue-700">{reporteEtiquetas.totalLeads}</p>
+              </div>
+              <div className="bg-green-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-green-900">Etiquetas Únicas</h4>
+                <p className="text-2xl font-bold text-green-700">{reporteEtiquetas.uniqueTagsCount}</p>
+              </div>
+              <div className="bg-purple-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-purple-900">Leads CON Etiquetas</h4>
+                <p className="text-2xl font-bold text-purple-700">{reporteEtiquetas.leadsWithTagsCount}</p>
+              </div>
+              <div className="bg-orange-50 p-4 rounded-lg">
+                <h4 className="text-sm font-medium text-orange-900">Leads SIN Etiquetas</h4>
+                <p className="text-2xl font-bold text-orange-700">{reporteEtiquetas.leadsWithoutTagsCount}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Tabla de Frecuencia de Etiquetas */}
+          <div>
+            <h3 className="text-md font-semibold text-gray-900 mb-4">Frecuencia de Etiquetas</h3>
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Etiqueta</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Frecuencia</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Porcentaje</th>
+                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Barra de Progreso</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {reporteEtiquetas.tagAnalysis.map((tag: any, index: number) => (
+                    <tr key={tag.tag} className="hover:bg-gray-50">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="flex items-center">
+                          <div className={`w-3 h-3 rounded-full mr-3 ${
+                            index % 4 === 0 ? 'bg-blue-500' :
+                            index % 4 === 1 ? 'bg-green-500' :
+                            index % 4 === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                          }`}></div>
+                          <div className="text-sm font-medium text-gray-900">{tag.tag}</div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                        {tag.count}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-gray-100 text-gray-800">
+                          {tag.percentage}%
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div 
+                            className={`h-2 rounded-full ${
+                              index % 4 === 0 ? 'bg-blue-500' :
+                              index % 4 === 1 ? 'bg-green-500' :
+                              index % 4 === 2 ? 'bg-purple-500' : 'bg-orange-500'
+                            }`}
+                            style={{ 
+                              width: `${tag.percentage}%`,
+                              transition: 'width 0.5s ease-out'
+                            }}
+                          ></div>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
       </div>
 
